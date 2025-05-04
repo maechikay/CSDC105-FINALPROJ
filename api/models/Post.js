@@ -1,35 +1,47 @@
-// Import mongoose library
-const mongoose = require('mongoose');
+// Import necessary modules from mongoose
+const mongoose = require('mongoose'); 
+const { Schema, model } = mongoose; // Destructure Schema and model to define models
 
-// Destructure Schema and model from mongoose for cleaner syntax
-const { Schema, model } = mongoose;
-
-// Define the schema for a blog post
+// Define the PostSchema for creating Post documents in MongoDB
 const PostSchema = new Schema({
-  // Title of the post
-  title: String,
+  // 'title' field stores the title of the post as a string
+  title: {
+    type: String, // Field type is a string
+    required: true, // Title is required for each post
+  },
 
-  // Short summary of the post
-  summary: String,
+  // 'summary' field stores a short summary of the post as a string
+  summary: {
+    type: String, // Field type is a string
+    required: true, // Summary is required for each post
+  },
 
-  // Full content of the post
-  content: String,
+  // 'content' field stores the main content of the post as a string
+  content: {
+    type: String, // Field type is a string
+    required: true, // Content is required for each post
+  },
 
-  // Path or URL to the cover image
-  cover: String,
+  // 'cover' field stores the file path or URL to the cover image of the post as a string
+  cover: {
+    type: String, // Field type is a string
+    required: true, // Cover image URL or file path is required
+  },
 
-  // Reference to the author (a user who created the post)
+  // 'author' field references the 'User' model, indicating the user who created the post
+  // This creates a relationship between posts and users
   author: {
-    type: Schema.Types.ObjectId, // MongoDB ObjectId type
-    ref: 'User',                // References the User model
+    type: Schema.Types.ObjectId, // Field type is ObjectId, referencing another document
+    ref: 'User', // Reference to the 'User' model (establishes a relationship between Post and User)
+    required: true, // The author field is required
   },
 }, {
-  // Automatically adds createdAt and updatedAt timestamps
-  timestamps: true,
+  // The 'timestamps' option automatically adds 'createdAt' and 'updatedAt' fields to the post
+  timestamps: true, // Automatically add creation and update timestamps
 });
 
-// Create the Post model based on the schema
-const PostModel = model('Post', PostSchema);
+// Create the Post model based on the PostSchema
+const PostModel = model('Post', PostSchema); // 'Post' is the name of the collection
 
-// Export the model to be used in other parts of the app
+// Export the PostModel so it can be used in other parts of the application
 module.exports = PostModel;

@@ -1,249 +1,242 @@
-// Import required packages
-const express = require('express');
-const cors = require('cors');
-const mongoose = require("mongoose");
-const User = require('./models/User');
-const Post = require('./models/Post');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const cookieParser = require('cookie-parser');
-const multer = require('multer');
-const fs = require('fs');
+// Import necessary libraries
+const express = require('express'); // Web framework for routing
+const cors = require('cors'); // Middleware for enabling Cross-Origin Resource Sharing
+const mongoose = require('mongoose'); // MongoDB object modeling for Node.js
+const User = require('./models/User'); // User model for interacting with user data in MongoDB
+const Post = require('./models/Post'); // Post model for interacting with posts in MongoDB
+const bcrypt = require('bcryptjs'); // Library for hashing passwords
+const jwt = require('jsonwebtoken'); // Library for creating and verifying JWT tokens
+const cookieParser = require('cookie-parser'); // Middleware for parsing cookies
+const multer = require('multer'); // Middleware for handling file uploads
+const fs = require('fs'); // File system module to interact with the file system
 
-// Set up file upload destination
-const uploadMiddleware = multer({ dest: 'uploads/' });
+// Set up file upload destination using multer
+const uploadMiddleware = multer({ dest: 'uploads/' }); // Store uploaded files in the 'uploads' folder
 
-// Initialize Express app
-const app = express();
+const app = express(); // Initialize Express application
 
-// Salt for hashing passwords and secret for JWT
-const salt = bcrypt.genSaltSync(10);
-const secret = 'asdfe45we45w345wegw345werjktjwertkj';
+// Salt for password hashing, used for bcrypt
+const salt = bcrypt.genSaltSync(10); // Generate salt for bcrypt hashing
 
-// Middleware
-app.use(cors({ credentials: true, origin: 'http://localhost:3000' }));
-app.use(express.json());
-app.use(cookieParser());
-app.use('/uploads', express.static(__dirname + '/uploads'));
+// Secret for JWT signing (JSON Web Token)
+const secret = 'asdfe45we45w345wegw345werjktjwertkj'; // A secret key for JWT signing
 
-// Connect to MongoDB
-mongoose.connect('mongodb+srv://blog:blog123@cluster0.v9gbxob.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0');
+// Middlewares
+app.use(cors({ credentials: true, origin: 'http://localhost:3000' })); // Enable CORS with specific frontend origin
+app.use(express.json()); // Parse incoming JSON requests
+app.use(cookieParser()); // Parse cookies sent with the request
+app.use('/uploads', express.static(__dirname + '/uploads')); // Serve static files from the 'uploads' folder
 
-// Register a new user
+// MongoDB connection
+mongoose.connect('mongodb+srv://hazel:holyshit@cluster0.vhnu0bv.mongodb.net/fp?retryWrites=true&w=majority'); // Connect to MongoDB database
+
+// Register route to create a new user
 app.post('/register', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body; // Extract username and password from the request body
   try {
+    // Create a new user document with hashed password
     const userDoc = await User.create({
       username,
-      password: bcrypt.hashSync(password, salt),
+      password: bcrypt.hashSync(password, salt), // Hash the password before storing it
     });
-    res.json(userDoc);
+    res.json(userDoc); // Send the created user document as a response
   } catch (e) {
-    res.status(400).json(e);
+    res.status(400).json(e); // Send error response if creation fails
   }
 });
 
-// Login user and send JWT token in cookie
+// Login route to authenticate a user
 app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const userDoc = await User.findOne({ username });
-  if (!userDoc) return res.status(400).json('User not found');
+  const { username, password } = req.body; // Extract username and password from the request body
+  const userDoc = await User.findOne({ username }); // Find user by username in the database
+  if (!userDoc) return res.status(400).json('User not found'); // Return error if user not found
 
+  // Compare the provided password with the stored hash
   const passOk = bcrypt.compareSync(password, userDoc.password);
   if (passOk) {
+    // Sign JWT token if password is correct
     jwt.sign({ username, id: userDoc._id }, secret, {}, (err, token) => {
-      if (err) return res.status(500).json('Token signing failed');
-      res.cookie('token', token).json({
+      if (err) return res.status(500).json('Token signing failed'); // Return error if token signing fails
+      res.cookie('token', token).json({ // Set token in the cookies and return user data
         id: userDoc._id,
         username,
       });
     });
   } else {
-    res.status(400).json('Wrong credentials');
+    res.status(400).json('Wrong credentials'); // Return error if password is incorrect
   }
 });
 
-// Get logged-in user's profile info
+// Profile route to get logged-in user's profile
 app.get('/profile', (req, res) => {
-  const { token } = req.cookies;
-  if (!token) return res.status(401).json('No token provided');
+  const { token } = req.cookies; // Get the JWT token from cookies
+  if (!token) return res.status(401).json('No token provided'); // Return error if no token is provided
 
+  // Verify the JWT token
   jwt.verify(token, secret, {}, (err, info) => {
-    if (err) return res.status(403).json('Invalid or expired token');
-    res.json(info);
+    if (err) return res.status(403).json('Invalid or expired token'); // Return error if token is invalid or expired
+    res.json(info); // Return decoded token info (user data)
   });
 });
 
-// Logout user by clearing the token cookie
+// Logout route to clear the token and log out the user
 app.post('/logout', (req, res) => {
-  res.cookie('token', '').json('ok');
+  res.cookie('token', '').json('ok'); // Clear the token cookie when logging out
 });
 
-// Create a new post with optional image
+// Post creation route with file upload functionality
 app.post('/post', uploadMiddleware.single('file'), async (req, res) => {
-  const { originalname, path } = req.file;
-  const ext = originalname.split('.').pop();
-  const newPath = path + '.' + ext;
-  fs.renameSync(path, newPath);
+  const { originalname, path } = req.file; // Get file details from the upload
+  const ext = originalname.split('.').pop(); // Get the file extension
+  const newPath = path + '.' + ext; // Create a new file path with the correct extension
+  fs.renameSync(path, newPath); // Rename the file to include the extension
 
-  const { token } = req.cookies;
+  const { token } = req.cookies; // Get token from cookies
   jwt.verify(token, secret, {}, async (err, info) => {
-    if (err) return res.status(403).json('Unauthorized');
+    if (err) return res.status(403).json('Unauthorized'); // Return error if token is invalid
 
-    const { title, summary, content } = req.body;
+    const { title, summary, content } = req.body; // Extract post data from request body
     const postDoc = await Post.create({
       title,
       summary,
       content,
-      cover: newPath,
-      author: info.id,
+      cover: newPath, // Set the file path as the cover image
+      author: info.id, // Set the author as the logged-in user
     });
 
-    res.json(postDoc);
+    res.json(postDoc); // Send the created post document as a response
   });
 });
 
-// Update an existing post
+// Post update route with file upload functionality
 app.put('/post', uploadMiddleware.single('file'), async (req, res) => {
   let newPath = null;
   if (req.file) {
-    const { originalname, path } = req.file;
-    const ext = originalname.split('.').pop();
-    newPath = path + '.' + ext;
-    fs.renameSync(path, newPath);
+    const { originalname, path } = req.file; // Get file details from the upload
+    const ext = originalname.split('.').pop(); // Get the file extension
+    newPath = path + '.' + ext; // Create a new file path with the extension
+    fs.renameSync(path, newPath); // Rename the file to include the extension
   }
 
-  const { token } = req.cookies;
+  const { token } = req.cookies; // Get token from cookies
   jwt.verify(token, secret, {}, async (err, info) => {
-    if (err) return res.status(403).json('Unauthorized');
+    if (err) return res.status(403).json('Unauthorized'); // Return error if token is invalid
 
-    const { id, title, summary, content } = req.body;
-    const postDoc = await Post.findById(id);
+    const { id, title, summary, content } = req.body; // Extract post update data
+    const postDoc = await Post.findById(id); // Find the post by ID
 
     if (String(postDoc.author) !== String(info.id)) {
-      return res.status(400).json('You are not the author');
+      return res.status(400).json('You are not the author'); // Return error if the user is not the author
     }
 
-    postDoc.title = title;
-    postDoc.summary = summary;
-    postDoc.content = content;
-    if (newPath) postDoc.cover = newPath;
+    postDoc.title = title; // Update the post title
+    postDoc.summary = summary; // Update the post summary
+    postDoc.content = content; // Update the post content
+    if (newPath) postDoc.cover = newPath; // Update the cover image if a new file was uploaded
 
-    await postDoc.save();
-    res.json(postDoc);
+    await postDoc.save(); // Save the updated post
+    res.json(postDoc); // Send the updated post as a response
   });
 });
 
-// Get a list of recent posts
+// Get all posts route
 app.get('/post', async (req, res) => {
-  const posts = await Post.find()
-    .populate('author', ['username'])
-    .sort({ createdAt: -1 })
-    .limit(20);
-  res.json(posts);
+  const posts = await Post.find() // Get all posts from the database
+    .populate('author', ['username']) // Populate author details
+    .sort({ createdAt: -1 }) // Sort posts by creation date, descending
+    .limit(20); // Limit to the latest 20 posts
+  res.json(posts); // Return the posts as a response
 });
 
-// Get a single post by ID
+// Get a single post by ID route
 app.get('/post/:id', async (req, res) => {
-  const { id } = req.params;
-  const postDoc = await Post.findById(id).populate('author', ['username']);
-  res.json(postDoc);
+  const { id } = req.params; // Get post ID from URL parameters
+  const postDoc = await Post.findById(id).populate('author', ['username']); // Find the post and populate author details
+  res.json(postDoc); // Return the post as a response
 });
 
-// Delete a post (only if the user is the author)
+// Delete a post by ID route
 app.delete('/post/:id', async (req, res) => {
-  const { token } = req.cookies;
-  const { id } = req.params;
+  const { token } = req.cookies; // Get token from cookies
+  const { id } = req.params; // Get post ID from URL parameters
 
-  if (!token) return res.status(403).json('Unauthorized');
+  if (!token) return res.status(403).json('Unauthorized'); // Return error if no token
 
   jwt.verify(token, secret, {}, async (err, info) => {
-    if (err) return res.status(403).json('Invalid or expired token');
+    if (err) return res.status(403).json('Invalid or expired token'); // Return error if token is invalid
 
-    const postDoc = await Post.findById(id);
-    if (!postDoc) return res.status(404).json('Post not found');
+    const postDoc = await Post.findById(id); // Find the post by ID
+    if (!postDoc) return res.status(404).json('Post not found'); // Return error if post not found
 
     if (String(postDoc.author) !== String(info.id)) {
-      return res.status(403).json('You are not the author of this post');
+      return res.status(403).json('You are not the author of this post'); // Return error if the user is not the author
     }
 
-    if (postDoc.cover && fs.existsSync(postDoc.cover)) {
+    if (postDoc.cover && fs.existsSync(postDoc.cover)) { // Delete the cover image if it exists
       fs.unlink(postDoc.cover, (err) => {
         if (err) console.error(err);
       });
     }
 
-    await postDoc.deleteOne();
-    res.json('Post deleted successfully');
+    // Remove this post from any user's bookmarks
+    await User.updateMany(
+      { bookmarks: postDoc._id },
+      { $pull: { bookmarks: postDoc._id } }
+    );
+
+    await postDoc.deleteOne(); // Delete the post from the database
+    res.json('Post deleted successfully'); // Return success message
   });
 });
 
-// Toggle bookmark on a post
+// Add or remove a post from the user's bookmarks
 app.post('/bookmark/:id', async (req, res) => {
-  const { token } = req.cookies;
-  const { id } = req.params;
+  const { token } = req.cookies; // Get token from cookies
+  const { id } = req.params; // Get post ID from URL parameters
 
-  if (!token) return res.status(403).json('Unauthorized');
+  if (!token) return res.status(403).json('Unauthorized'); // Return error if no token
 
   jwt.verify(token, secret, {}, async (err, info) => {
-    if (err) return res.status(403).json('Invalid or expired token');
+    if (err) return res.status(403).json('Invalid or expired token'); // Return error if token is invalid
 
-    const postDoc = await Post.findById(id);
-    if (!postDoc) return res.status(404).json('Post not found');
+    const postDoc = await Post.findById(id); // Find the post by ID
+    if (!postDoc) return res.status(404).json('Post not found'); // Return error if post not found
 
-    const userDoc = await User.findById(info.id);
-    if (!userDoc) return res.status(404).json('User not found');
+    const userDoc = await User.findById(info.id); // Find the user by ID
+    if (!userDoc) return res.status(404).json('User not found'); // Return error if user not found
 
-    const bookmarkIndex = userDoc.bookmarks.indexOf(id);
+    const bookmarkIndex = userDoc.bookmarks.indexOf(id); // Check if post is already bookmarked
 
     if (bookmarkIndex === -1) {
-      userDoc.bookmarks.push(id);
+      userDoc.bookmarks.push(id); // Add post to bookmarks if not already present
     } else {
-      userDoc.bookmarks.splice(bookmarkIndex, 1);
+      userDoc.bookmarks.splice(bookmarkIndex, 1); // Remove post from bookmarks if already present
     }
 
-    await userDoc.save();
-    res.json({ bookmarks: userDoc.bookmarks });
-  });
-});
-
-// Check if a post is bookmarked by the user
-app.get('/bookmark/:id', async (req, res) => {
-  const { token } = req.cookies;
-  const { id } = req.params;
-
-  if (!token) return res.status(403).json('Unauthorized');
-
-  jwt.verify(token, secret, {}, async (err, info) => {
-    if (err) return res.status(403).json('Invalid or expired token');
-
-    const userDoc = await User.findById(info.id);
-    if (!userDoc) return res.status(404).json('User not found');
-
-    const isBookmarked = userDoc.bookmarks.includes(id);
-    res.json({ bookmarked: isBookmarked });
+    await userDoc.save(); // Save the updated user document
+    res.json({ bookmarks: userDoc.bookmarks }); // Return updated bookmarks
   });
 });
 
 // Get all bookmarked posts for the logged-in user
 app.get('/bookmarked-posts', async (req, res) => {
-  const { token } = req.cookies;
+  const { token } = req.cookies; // Get token from cookies
 
-  if (!token) return res.status(403).json('Unauthorized');
+  if (!token) return res.status(403).json('Unauthorized'); // Return error if no token
 
   jwt.verify(token, secret, {}, async (err, info) => {
-    if (err) return res.status(403).json('Invalid or expired token');
+    if (err) return res.status(403).json('Invalid or expired token'); // Return error if token is invalid
 
-    const userDoc = await User.findById(info.id).populate({
+    const userDoc = await User.findById(info.id).populate({ // Find the user and populate their bookmarks
       path: 'bookmarks',
-      populate: { path: 'author', select: 'username' },
+      populate: { path: 'author', select: 'username' }, // Populate author details for each bookmark
     });
 
-    res.json(userDoc.bookmarks);
+    res.json(userDoc.bookmarks); // Return the user's bookmarks as a response
   });
 });
 
-// Start the server
+// Start the server on port 4000
 app.listen(4000, () => {
   console.log('Server running on http://localhost:4000');
 });
